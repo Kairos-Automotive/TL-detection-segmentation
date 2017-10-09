@@ -256,12 +256,6 @@ First optimization we can do after training is freezing network weights
 by converting Variable nodes to constants
 
 ```
-python main.py freeze --ckpt_dir=ckpt --frozen_model_dir=frozen_model
-```
-
-or
-
-```
 ./05_freeze.sh
 ```
 
@@ -271,7 +265,7 @@ In our case we have
 In total 38 variables are converted and all the nodes related to
 training are pruned. Saved network size falls from 539mb to 137mb.
 
-### Optimizing for Inference
+## Optimizing for Inference
 
 We can further optimize the resulting graph using tensorflow tools.
 One such transformation is
