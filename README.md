@@ -244,3 +244,51 @@ $ tensorboard --logdir summaries --host 0.0.0.0 --port 8080
 If you then open tensorboard address `http://192.168.0.1:8080/` in your web browser
 you will see
 the graph visualisation and training statistics
+
+
+## Freezing Variables
+
+We can use the trained network saved in `runs/*/model` or we can
+run a few
+[optimisations for subsequent inference](https://www.tensorflow.org/performance/performance_guide)
+
+First optimization we can do after training is freezing network weights
+by converting Variable nodes to constants
+
+```
+python main.py freeze --ckpt_dir=ckpt --frozen_model_dir=frozen_model
+```
+
+or
+
+```
+./05_freeze.sh
+```
+
+In our case we have
+1859 ops in the input graph and
+298 ops in the frozen graph.
+In total 38 variables are converted and all the nodes related to
+training are pruned. Saved network size falls from 539mb to 137mb.
+
+### Optimizing for Inference
+
+We can further optimize the resulting graph using tensorflow tools.
+One such transformation is
+[weights quantization](https://www.tensorflow.org/performance/quantization)
+To do this we first need to build the graph transform tool
+from sources:
+```
+$ cd ~/dev/tf/tensoflow-r1.0
+$ bazel build tensorflow/tools/graph_transforms:transform_graph
+```
+
+Then run the transformations (as spelled out in `optimise.sh`)
+as follows:
+
+```
+$ ./06_optimise.sh
+```
+
+
+
