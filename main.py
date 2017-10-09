@@ -16,6 +16,9 @@ from tensorflow.python.framework import graph_util as tf_graph_util
 from tqdm import tqdm
 import scipy.misc
 import numpy as np
+from matplotlib import pyplot as plt
+from scipy.ndimage.measurements import label
+import matplotlib.patches as patches
 
 import helper
 import fcn8vgg16
@@ -180,15 +183,37 @@ def train(args, image_shape, city_labels_path_pattern, bosch_labels_path_pattern
         print('saving trained model to {}'.format(model_dir))
         model.save_model(sess, model_dir)
 
+def get_labeled_bboxes(heatmap):
+    # Use labels() from scipy.ndimage.measurements to identify 'cars'
+    labels = label(heatmap)
+    bboxes = []
+    for tl_number in range(1, labels[1]+1):
+        # Find pixels with each tl_number label value
+        nonzero = (labels[0] == tl_number).nonzero()
+        # Identify x and y values of those pixels
+        nonzeroy = np.array(nonzero[0])
+        nonzerox = np.array(nonzero[1])
+        # Define a bounding box based on min/max x and y
+        bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+        # skip boxes which do not look realistic. too small in one dimension or too 'vertical'
+        #w = bbox[1][0] - bbox[0][0]
+        #h = bbox[1][1] - bbox[0][1]
+        #if w<30 or h<30 or w==0 or float(h)/float(w) > 1.5:
+        #    continue
+        # Draw the box on the image and return it
+        bboxes.append(bbox)
+    # Return the bounding boxes
+    return bboxes
 
-def predict_image(sess, model, image, colors_dict):
-    # this image size is arbitrary and may break middle of decoder in the network.
-    # need to feed FCN images sizes in multiples of 32
+def predict_image(sess, model, image):
+    # Adjust image size.
+    # Input image size is arbitrary and may break middle of decoder in the network.
+    # We need to feed FCN images sizes in multiples of 32
     image_shape = [x for x in image.shape]
     fcn_shape = [x for x in image.shape]
     # should be bigger and multiple of 32 for fcn to work
-    fcn_shape[0] = math.ceil(fcn_shape[0] / 32) * 32
-    fcn_shape[1] = math.ceil(fcn_shape[1] / 32) * 32
+    fcn_shape[0] = int(math.ceil(fcn_shape[0] / 32) * 32)
+    fcn_shape[1] = int(math.ceil(fcn_shape[1] / 32) * 32)
     tmp_image = np.zeros(fcn_shape, dtype=np.uint8)
     tmp_image[0:image_shape[0], 0:image_shape[1], :] = image
 
@@ -199,24 +224,28 @@ def predict_image(sess, model, image, colors_dict):
     duration = timer() - start_time
     tf_time_ms = int(duration * 1000)
 
+    # adjust predicted_class array back to original sized image
+    predicted_class = predicted_class[0:image_shape[0], 0:image_shape[1], :]
+
     # overlay on image
     start_time = timer()
     result_im = scipy.misc.toimage(image)
-    for label in range(len(colors_dict)):
-        segmentation = np.expand_dims(predicted_class[:, :, label], axis=2)
-        mask = np.dot(segmentation, colors_dict[label])
-        mask = scipy.misc.toimage(mask, mode="RGBA")
-        # paste (from PIL) seem to take time (or rather toimage calls to convert to PIL format).
-        # in the future need to try this to speed up
-        # https://stackoverflow.com/questions/19561597/pil-image-paste-on-another-image-with-alpha
-        result_im.paste(mask, box=None, mask=mask)
+    label = 1 # only take 'traffic light' class pixels. 0 is background
+    segmentation = np.expand_dims(predicted_class[:, :, label], axis=2)
+    # calculate bounding boxes
+    bboxes = get_labeled_bboxes(segmentation)
+    # create segmented image
+    transparency_level = 128
+    color = np.array([[0, 255, 0, transparency_level]], dtype=np.uint8)
+    mask = np.dot(segmentation, color)
+    mask = scipy.misc.toimage(mask, mode="RGBA")
+    result_im.paste(mask, box=None, mask=mask)
     segmented_image = np.array(result_im)
     duration = timer() - start_time
     img_time_ms = int(duration * 1000)
 
-    out = segmented_image[0:image_shape[0], 0:image_shape[1], :]
+    return segmented_image, tf_time_ms, img_time_ms, bboxes
 
-    return out, tf_time_ms, img_time_ms
 
 def session_config(args):
     # tensorflow GPU config
@@ -232,33 +261,27 @@ def session_config(args):
         config.graph_options.optimizer_options.global_jit_level = jit_level
 
 
-def predict_files(args, image_shape):
+def predict_file(args, image_shape, file_names):
     tf.reset_default_graph()
     with tf.Session(config=session_config(args)) as sess:
         model = fcn8vgg16.FCN8_VGG16(define_graph=False)
         model.load_model(sess, 'trained_model' if args.model_dir is None else args.model_dir)
 
-        # Make folder for current run
-        output_dir = os.path.join(args.runs_dir, time.strftime("%Y%m%d_%H%M%S"))
-        if os.path.exists(output_dir):
-            shutil.rmtree(output_dir)
-        os.makedirs(output_dir)
-
-        print('Predicting on test images {} to: {}'.format(args.images_paths, output_dir))
-
-        colors = get_colors()
-
-        images_pbar = tqdm(glob.glob(args.images_paths),
-                            desc='Predicting (last tf call __ ms)',
-                            unit='images')
+        #images_pbar = tqdm(glob.glob(args.images_paths),
+        #                    desc='Predicting (last tf call __ ms)',
+        #                    unit='images')
         tf_total_duration = 0.
         img_total_duration = 0.
         tf_count = 0.
         img_count = 0.
-        for image_file in images_pbar:
+        for image_file in file_names:#images_pbar:
+            print('Predicting on image {}'.format(image_file))
             image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
 
-            segmented_image, tf_time_ms, img_time_ms = predict_image(sess, model, image, colors)
+            # call for TF to get up to speed
+            segmented_image, tf_time_ms, img_time_ms, bboxes = predict_image(sess, model, image)
+            # measure real performance
+            segmented_image, tf_time_ms, img_time_ms, bboxes = predict_image(sess, model, image)
 
             if tf_count>0:
                 tf_total_duration += tf_time_ms
@@ -270,17 +293,42 @@ def predict_files(args, image_shape):
             img_count += 1
             img_avg_ms = int(img_total_duration/(img_count-1 if img_count>1 else 1))
 
-            images_pbar.set_description('Predicting (last tf call {} ms, avg tf {} ms, last img {} ms, avg {} ms)'.format(
-                tf_time_ms, tf_avg_ms, img_time_ms, img_avg_ms))
+            print('tf call {} ms, img process {} ms'.format(tf_time_ms, img_time_ms))
+
+            #images_pbar.set_description('Predicting (last tf call {} ms, avg tf {} ms, last img {} ms, avg {} ms)'.format(
+            #    tf_time_ms, tf_avg_ms, img_time_ms, img_avg_ms))
+
             # tf timings:
-            #    mac cpu inference is  670ms on trained but unoptimized graph. tf 1.3
-            # ubuntu cpu inference is 1360ms on pip tf-gpu 1.3.
-            # ubuntu cpu inference is  560ms on custom built tf-gpu 1.3 (cuda+xla).
-            # ubuntu gpu inference is   18ms on custom built tf-gpu 1.3 (cuda+xla). 580ms total per image. 1.7 fps
+            #    mac cpu inference is 580ms on trained frozen graph. tf 1.0 from sources/cpu
+            # ubuntu cpu inference is  on pip tf-gpu 1.3.
+            # ubuntu cpu inference is   on custom built tf-gpu 1.3 (cuda+xla).
+            # ubuntu gpu inference is    on custom built tf-gpu 1.3 (cuda+xla). 580ms total per image. 1.7 fps
             # quantize_weights increases inference to 50ms
             # final performance on ubuntu/1080ti with ssd, including time to load/save is 3 fps
 
-            scipy.misc.imsave(os.path.join(output_dir, os.path.basename(image_file)), segmented_image)
+            # add bounding boxes on segmented image
+            #fig, ax = plt.subplots(1)
+            n = len(bboxes)
+            if n>0:
+                ax_im = plt.subplot2grid((2, n), (0, 0), colspan=n)
+                ax_im.imshow(segmented_image)
+                for i, box in enumerate(bboxes):
+                    xy = box[0]
+                    w = box[1][0] - xy[0]
+                    h = box[1][1] - xy[1]
+                    rect = patches.Rectangle(xy, w, h, linewidth=1, edgecolor='r', facecolor='none')
+                    ax_im.add_patch(rect)
+                    ax_i = plt.subplot2grid((2, n), (1, i))
+                    ax_i.imshow(image[xy[1]:xy[1]+h, xy[0]:xy[0]+w])
+            else:
+                fig, ax_im = plt.subplots()
+                ax_im.imshow(segmented_image)
+            fig = plt.gcf()
+            fig.canvas.set_window_title(image_file)
+            plt.draw()
+            plt.show()
+            plt.pause(5)
+            #scipy.misc.imsave(os.path.join(output_dir, os.path.basename(image_file)), segmented_image)
 
 
 def freeze_graph(args):
@@ -398,15 +446,6 @@ def predict_video(args, image_shape=None):
 
 
 
-def get_colors():
-    num_classes = len(cityscape_labels.labels)
-    colors = {}
-    transparency_level = 128
-    for label in range(num_classes):
-        color = cityscape_labels.trainId2label[label].color
-        colors[label] = np.array([color + (transparency_level,)], dtype=np.uint8)
-    return colors
-
 
 def check_tf():
     # Check TensorFlow Version
@@ -442,6 +481,7 @@ def parse_args():
     parser.add_argument('-md', '--model_dir', help='model directory. default None - model directory is created in runs. needed for predict', type=str, default=None)
     parser.add_argument('-fd', '--frozen_model_dir', help='model directory for frozen graph. for freeze', type=str, default=None)
     parser.add_argument('-od', '--optimised_model_dir', help='model directory for optimised graph. for optimize', type=str, default=None)
+    parser.add_argument('-fn', '--file_name', help='file to run prediction on', type=str, default=None)
     args = parser.parse_args()
     return args
 
@@ -470,9 +510,12 @@ if __name__ == '__main__':
         image_shape = (256, 512)
         train(args, image_shape, city_labels_path_pattern, bosch_labels_path_pattern)
     elif args.action=='predict':
-        #print('images_paths={}'.format(args.images_paths))
         image_shape = (256, 512)
-        predict_files(args, image_shape)
+        if args.file_name is not None:
+            files = [args.file_name]
+        else:
+            files = glob.glob('test_img/*.*')
+        predict_file(args, image_shape, files)
     elif args.action == 'freeze':
         freeze_graph(args)
     elif args.action == 'optimise':
