@@ -39,14 +39,13 @@ def main():
     searchCoarse = os.path.join( cityscapesPath , "gtCoarse" , "*" , "*" , "*_gt*_polygons.json" )
 
     # search files
-    filesFine = []#glob.glob( searchFine )
+    filesFine = glob.glob( searchFine )
     filesFine.sort()
     filesCoarse = glob.glob( searchCoarse )
     filesCoarse.sort()
 
     # concatenate fine and coarse
     files = filesFine + filesCoarse
-    # files = filesFine # use this line if fine is enough for now.
 
     # quit if we did not find anything
     if not files:
