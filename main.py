@@ -161,7 +161,6 @@ def train(args, image_shape, city_labels_path_pattern, bosch_labels_path_pattern
         # save training details to text file
         with open(os.path.join(output_dir, "params.txt"), "w") as f:
             f.write('keep_prob={}\n'.format(args.keep_prob))
-            f.write('images_paths={}\n'.format(args.images_paths))
             f.write('num_samples={}\n'.format(num_samples))
             f.write('batch_size={}\n'.format(args.batch_size))
             f.write('epochs={}\n'.format(args.epochs))
