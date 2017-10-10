@@ -60,7 +60,7 @@ def load_trained_vgg_vars(sess):
     return var_values
 
 
-def get_train_batch_generator(city_labels_path_pattern, bosch_labels_path_pattern, image_shape):
+def get_train_batch_generator(label_path_patterns, image_shape):
     """
     Create batch generator for batches of training data. The label paths are inferred
     :param city_labels_path_pattern: path pattern for Cityscapes images
@@ -68,31 +68,63 @@ def get_train_batch_generator(city_labels_path_pattern, bosch_labels_path_patter
     :param image_shape: Tuple - Shape of image
     :return:
     """
-    city_label_paths = glob.glob(city_labels_path_pattern)
-    city_image_paths = {}
-    for lb_path in city_label_paths:
-        im_path = lb_path.replace('/gtFine/', '/leftImg8bit/')
-        im_path = im_path.replace('/gtCoarse/', '/leftImg8bit/')
-        im_path = im_path.replace('_gtCoarse_labelTrainIds.png', '_leftImg8bit.png')
-        im_path = im_path.replace('_gtFine_labelTrainIds.png', '_leftImg8bit.png')
-        if not os.path.exists(im_path):
-            raise Exception('cannot find image path corresponding to label {}'.format(lb_path))
-        city_image_paths[lb_path] = im_path
+    label_paths = []
+    image_paths = {}
 
-    bosch_label_paths = [n for n in glob.glob(bosch_labels_path_pattern) if n.find('_labels.png')>-1]
-    bosch_image_paths = {}
-    for lb_path in bosch_label_paths:
-        im_path = lb_path.replace('_labels.png', '.png')
-        if not os.path.exists(im_path):
-            raise Exception('cannot find image path corresponding to label {}'.format(lb_path))
-        bosch_image_paths[lb_path] = im_path
+    if 'city' in label_path_patterns:
+        city_labels_path_pattern = label_path_patterns['city']
+        city_label_paths = glob.glob(city_labels_path_pattern)
+        city_image_paths = {}
+        for lb_path in city_label_paths:
+            im_path = lb_path.replace('/gtFine/', '/leftImg8bit/')
+            im_path = im_path.replace('/gtCoarse/', '/leftImg8bit/')
+            im_path = im_path.replace('_gtCoarse_labelTrainIds.png', '_leftImg8bit.png')
+            im_path = im_path.replace('_gtFine_labelTrainIds.png', '_leftImg8bit.png')
+            if not os.path.exists(im_path):
+                raise Exception('cannot find image path corresponding to label {}'.format(lb_path))
+            city_image_paths[lb_path] = im_path
+        print("Cityscapes training examples: {}".format(len(city_label_paths)))
+        label_paths += city_label_paths
+        image_paths.update(city_image_paths.copy()) # https://stackoverflow.com/questions/38987/how-to-merge-two-dictionaries-in-a-single-expression
 
-    print("Cityscapes training examples: {}".format(len(city_label_paths)))
-    print("Bosch training examples: {}".format(len(bosch_label_paths)))
+    if 'bosch' in label_path_patterns:
+        bosch_labels_path_pattern = label_path_patterns['bosch']
+        bosch_label_paths = [n for n in glob.glob(bosch_labels_path_pattern) if n.find('_labels.png')>-1]
+        bosch_image_paths = {}
+        for lb_path in bosch_label_paths:
+            im_path = lb_path.replace('_labels.png', '.png')
+            if not os.path.exists(im_path):
+                raise Exception('cannot find image path corresponding to label {}'.format(lb_path))
+            bosch_image_paths[lb_path] = im_path
+        print("Bosch training examples: {}".format(len(bosch_label_paths)))
+        label_paths += bosch_label_paths
+        image_paths.update(bosch_image_paths.copy())
 
-    label_paths = city_label_paths + bosch_label_paths
-    image_paths = city_image_paths.copy()
-    image_paths.update(bosch_image_paths) # https://stackoverflow.com/questions/38987/how-to-merge-two-dictionaries-in-a-single-expression
+    if 'sim' in label_path_patterns:
+        sim_labels_path_pattern = label_path_patterns['sim']
+        sim_label_paths = [n for n in glob.glob(sim_labels_path_pattern) if n.find('_labels.png')>-1]
+        sim_image_paths = {}
+        for lb_path in sim_label_paths:
+            im_path = lb_path.replace('_labels.png', '.jpg')
+            if not os.path.exists(im_path):
+                raise Exception('cannot find image path corresponding to label {}'.format(lb_path))
+            sim_image_paths[lb_path] = im_path
+        print("Simulator training examples: {}".format(len(sim_label_paths)))
+        label_paths += sim_label_paths
+        image_paths.update(sim_image_paths.copy())
+
+    if 'carla' in label_path_patterns:
+        carla_labels_path_pattern = label_path_patterns['carla']
+        carla_label_paths = [n for n in glob.glob(carla_labels_path_pattern) if n.find('_labels.png')>-1]
+        carla_image_paths = {}
+        for lb_path in carla_label_paths:
+            im_path = lb_path.replace('_labels.png', '.jpg')
+            if not os.path.exists(im_path):
+                raise Exception('cannot find image path corresponding to label {}'.format(lb_path))
+            carla_image_paths[lb_path] = im_path
+        print("CARLA training examples: {}".format(len(carla_label_paths)))
+        label_paths += carla_label_paths
+        image_paths.update(carla_image_paths.copy())
 
     num_classes = 2
     num_samples = len(label_paths)
@@ -124,7 +156,7 @@ def get_train_batch_generator(city_labels_path_pattern, bosch_labels_path_patter
     return get_batches_fn, num_samples
 
 
-def train(args, image_shape, city_labels_path_pattern, bosch_labels_path_pattern):
+def train(args, image_shape, labels_path_patterns):
     config = session_config(args)
 
     # extract pre-trained VGG weights
@@ -142,8 +174,7 @@ def train(args, image_shape, city_labels_path_pattern, bosch_labels_path_pattern
         model.restore_variables(sess, var_values)
 
         # Create batch generator
-        train_batches_fn, num_samples = get_train_batch_generator(city_labels_path_pattern,
-                                                                  bosch_labels_path_pattern,
+        train_batches_fn, num_samples = get_train_batch_generator(label_path_patterns,
                                                                   image_shape)
         print("total number of training examples: {}".format(num_samples))
         time_str = time.strftime("%Y%m%d_%H%M%S")
@@ -465,9 +496,9 @@ def check_tf():
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('action',
-                        help='what to do: train/predict/freeze/optimise',
+                        help='what to do: train/train2/predict/freeze/optimise',
                         type=str,
-                        choices=['train','predict', 'freeze', 'optimise'])
+                        choices=['train','train2','predict', 'freeze', 'optimise'])
     parser.add_argument('-g', '--gpu', help='number of GPUs to use. default 0 (use CPU)', type=int, default=0)
     parser.add_argument('-gm','--gpu_mem', help='GPU memory fraction to use. default 0.9', type=float, default=0.9)
     parser.add_argument('-x','--xla', help='XLA JIT level. default None', type=int, default=None, choices=[1,2])
@@ -490,25 +521,36 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    city_labels_path_pattern = 'data/cityscapes/*/*/*/*_gt*_labelTrainIds.png'
-    bosch_labels_path_pattern = 'data/bosch/rgb/*/*/*_labels.png'
-
     args = parse_args()
 
     check_tf()
 
     print("action={}".format(args.action))
     print("gpu={}".format(args.gpu))
-    if args.action=='train':
+    if args.action=='train' or args.action=='train2':
         print('keep_prob={}'.format(args.keep_prob))
         print('batch_size={}'.format(args.batch_size))
         print('epochs={}'.format(args.epochs))
         print('learning_rate={}'.format(args.learning_rate))
         # this is image size to be read and trained on. predict also uses this
-        # cityscapes size is 2048x1024, i.e. 2:1.
-        # bosch size is 1280x720. i.e. 80x45~1.77.
         image_shape = (256, 512)
-        train(args, image_shape, city_labels_path_pattern, bosch_labels_path_pattern)
+        if args.action=='train':
+            # cityscapes size is 2048x1024, i.e. 2:1.
+            # bosch size is 1280x720. i.e. 80x45~1.77.
+            label_path_patterns = {
+                'city': 'data/cityscapes/*/*/*/*_gt*_labelTrainIds.png',
+                'bosch': 'data/bosch/rgb/*/*/*_labels.png'
+            }
+            train(args, image_shape, label_path_patterns)
+        else:
+            # sim size is 800x600. 1.33
+            # bosch size is 1368x1096. i.e. 1.25
+            label_path_patterns = {
+                'sim': 'data/sim/vatzal/sim_data_capture/*_labels.png',
+                'carla': 'data/carla/vatzal/real_training_data/*/*_labels.png'
+            }
+            train(args, image_shape, label_path_patterns)
+
     elif args.action=='predict':
         image_shape = (256, 512)
         if args.file_name is not None:
