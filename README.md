@@ -285,4 +285,24 @@ $ ./06_optimise.sh
 ```
 
 
+## Inference on Test Images
 
+You can run predictions on test images as follows:
+
+```
+python main.py predict --gpu=0 --xla=2 --model_dir=frozen_model --file_name=test_img/carla12.jpg
+```
+
+You would see at the end of the output:
+```
+Predicting on image test_img/carla12.jpg
+tf call 585 ms, img process 5 ms
+```
+
+The 'tf call' is time, in milliseconds, to execute tensorflow `session.run`
+ to get the predictions.
+'img process' is time, in milliseconds, to superimpose the
+segmentation results
+over the original image and calculate bounding boxes.
+
+![results of detection](test_img/test_prediction_output.png)
