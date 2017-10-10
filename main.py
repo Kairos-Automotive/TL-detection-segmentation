@@ -331,11 +331,11 @@ def predict_file(args, image_shape, file_names):
 
             # tf timings:
             #    mac cpu inference is 580ms on trained frozen graph. tf 1.0 from sources/cpu
-            # ubuntu cpu inference is  on pip tf-gpu 1.3.
+            # ubuntu cpu inference is 1600ms on pip tf 1.0
+            # ubuntu gpu inference is 12ms on pip tf-gpu 1.0 (cuda 6.0)
+            # ubuntu gpu inference is 14ms on custom built tf-gpu 1.0 (cuda+xla).
             # ubuntu cpu inference is   on custom built tf-gpu 1.3 (cuda+xla).
-            # ubuntu gpu inference is    on custom built tf-gpu 1.3 (cuda+xla). 580ms total per image. 1.7 fps
-            # quantize_weights increases inference to 50ms
-            # final performance on ubuntu/1080ti with ssd, including time to load/save is 3 fps
+            # quantize_weights increases inference to ??ms
 
             # add bounding boxes on segmented image
             #fig, ax = plt.subplots(1)
