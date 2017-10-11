@@ -16,7 +16,7 @@
 # bazel build tensorflow/tools/graph_transforms:transform_graph
 # to build transform tool from source
 
-~/dev/tf/tensorflow-r1.0/bazel-bin/tensorflow/tools/graph_transforms/transform_graph \
+~/dev/tf/tensorflow-r1.3/bazel-bin/tensorflow/tools/graph_transforms/transform_graph \
 --in_graph=$1/graph.pb \
 --out_graph=$1/optimised_graph.pb \
 --inputs=data/images \
