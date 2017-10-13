@@ -17,7 +17,7 @@ maintained here.
 
 ## Architecture
 
-We implement the model in pure tensorflow (version 1.0 -- as installed
+We implement the model in pure tensorflow (version 1.3 -- as installed
 on Carla.
 We recommend [building tensorflow from sources](https://www.tensorflow.org/install/install_sources)
 to fully utilise your hardware capabilities.
@@ -273,7 +273,7 @@ One such transformation is
 To do this we first need to build the graph transform tool
 from sources:
 ```
-$ cd ~/dev/tf/tensoflow-r1.0
+$ cd ~/dev/tf/tensoflow-r1.3
 $ bazel build tensorflow/tools/graph_transforms:transform_graph
 ```
 
