@@ -6,15 +6,14 @@ import shutil
 import time
 import argparse
 import glob
-import re
 import random
 from timeit import default_timer as timer
 import math
 
 import tensorflow as tf
 from tensorflow.python.framework import graph_util as tf_graph_util
-from tqdm import tqdm
-import scipy.misc
+from tensorflow.python.client import timeline
+import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.ndimage.measurements import label
@@ -132,7 +131,8 @@ def get_train_batch_generator(label_path_patterns, image_shape):
 
     def get_batches_fn(batch_size):
         """
-        Create batches of training data
+        Create batches of training data.
+        Uses OpenCV imread so the format of read images is BGR.
         :param batch_size: Batch Size
         :return: Batches of training data
         """
@@ -143,8 +143,8 @@ def get_train_batch_generator(label_path_patterns, image_shape):
             gt_images = []
             for label_file in label_paths[batch_i:batch_i+batch_size]:
                 image_file = image_paths[label_file]
-                image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape, interp='nearest')
-                gt_image = scipy.misc.imresize(scipy.misc.imread(label_file), image_shape, interp='nearest')
+                image = cv2.resize(cv2.imread(image_file), (image_shape[1],image_shape[0],), interpolation=cv2.INTER_NEAREST)
+                gt_image = cv2.resize(cv2.imread(label_file), (image_shape[1],image_shape[0],), interpolation=cv2.INTER_NEAREST)
                 tmp = []
                 for label in range(num_classes):
                   tmp.append(gt_image == label)
@@ -214,6 +214,7 @@ def train(args, image_shape, labels_path_patterns):
         print('saving trained model to {}'.format(model_dir))
         model.save_model(sess, model_dir)
 
+
 def get_labeled_bboxes(heatmap):
     # Use labels() from scipy.ndimage.measurements to identify 'cars'
     labels = label(heatmap)
@@ -236,8 +237,9 @@ def get_labeled_bboxes(heatmap):
     # Return the bounding boxes
     return bboxes
 
-def predict_image(sess, model, image):
+def predict_image(sess, model, image, trace=False):
     # Adjust image size.
+    # Assumes BGR color scheme, as read by OpenCV
     # Input image size is arbitrary and may break middle of decoder in the network.
     # We need to feed FCN images sizes in multiples of 32
     image_shape = [x for x in image.shape]
@@ -250,7 +252,13 @@ def predict_image(sess, model, image):
 
     # run TF prediction
     start_time = timer()
-    predicted_class = model.predict_one(sess, tmp_image)
+    if trace:
+        predicted_class, run_metadata = model.predict_one(sess, tmp_image, trace=trace)
+        fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+        with open('tf_trace_timeline.json', 'w') as f:
+            f.write(fetched_timeline.generate_chrome_trace_format())
+    else:
+        predicted_class = model.predict_one(sess, tmp_image)
     predicted_class = np.array(predicted_class, dtype=np.uint8)
     duration = timer() - start_time
     tf_time_ms = int(duration * 1000)
@@ -260,18 +268,17 @@ def predict_image(sess, model, image):
 
     # overlay on image
     start_time = timer()
-    result_im = scipy.misc.toimage(image)
     label = 1 # only take 'traffic light' class pixels. 0 is background
     segmentation = np.expand_dims(predicted_class[:, :, label], axis=2)
     # calculate bounding boxes
     bboxes = get_labeled_bboxes(segmentation)
     # create segmented image
-    transparency_level = 128
-    color = np.array([[0, 255, 0, transparency_level]], dtype=np.uint8)
+    color = np.array([[0, 255, 0]], dtype=np.uint8)
     mask = np.dot(segmentation, color)
-    mask = scipy.misc.toimage(mask, mode="RGBA")
-    result_im.paste(mask, box=None, mask=mask)
-    segmented_image = np.array(result_im)
+    transparency_level = 0.5
+    segmented_image = np.zeros_like(image)
+    cv2.addWeighted(mask, transparency_level, image, 1.0, 0, segmented_image)
+
     duration = timer() - start_time
     img_time_ms = int(duration * 1000)
 
@@ -298,21 +305,19 @@ def predict_file(args, image_shape, file_names):
         model = fcn8vgg16.FCN8_VGG16(define_graph=False)
         model.load_model(sess, 'trained_model' if args.model_dir is None else args.model_dir)
 
-        #images_pbar = tqdm(glob.glob(args.images_paths),
-        #                    desc='Predicting (last tf call __ ms)',
-        #                    unit='images')
         tf_total_duration = 0.
         img_total_duration = 0.
         tf_count = 0.
         img_count = 0.
         for image_file in file_names:#images_pbar:
             print('Predicting on image {}'.format(image_file))
-            image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
+            image = cv2.resize(cv2.imread(image_file), (image_shape[1],image_shape[0],), interpolation=cv2.INTER_NEAREST)
 
-            # call for TF to get up to speed
+            # first call for TF to get up to speed
             segmented_image, tf_time_ms, img_time_ms, bboxes = predict_image(sess, model, image)
+
             # measure real performance
-            segmented_image, tf_time_ms, img_time_ms, bboxes = predict_image(sess, model, image)
+            segmented_image, tf_time_ms, img_time_ms, bboxes = predict_image(sess, model, image, trace=args.trace)
 
             if tf_count>0:
                 tf_total_duration += tf_time_ms
@@ -326,9 +331,6 @@ def predict_file(args, image_shape, file_names):
 
             print('tf call {} ms, img process {} ms'.format(tf_time_ms, img_time_ms))
 
-            #images_pbar.set_description('Predicting (last tf call {} ms, avg tf {} ms, last img {} ms, avg {} ms)'.format(
-            #    tf_time_ms, tf_avg_ms, img_time_ms, img_avg_ms))
-
             # tf timings:
             #    mac cpu inference is 580ms on trained frozen graph. tf 1.0 from sources/cpu
             # ubuntu cpu inference is 1600ms on pip tf 1.0
@@ -338,11 +340,10 @@ def predict_file(args, image_shape, file_names):
             # quantize_weights increases inference to ??ms
 
             # add bounding boxes on segmented image
-            #fig, ax = plt.subplots(1)
             n = len(bboxes)
             if n>0:
                 ax_im = plt.subplot2grid((2, n), (0, 0), colspan=n)
-                ax_im.imshow(segmented_image)
+                ax_im.imshow(cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB))
                 for i, box in enumerate(bboxes):
                     xy = box[0]
                     w = box[1][0] - xy[0]
@@ -350,16 +351,15 @@ def predict_file(args, image_shape, file_names):
                     rect = patches.Rectangle(xy, w, h, linewidth=1, edgecolor='r', facecolor='none')
                     ax_im.add_patch(rect)
                     ax_i = plt.subplot2grid((2, n), (1, i))
-                    ax_i.imshow(image[xy[1]:xy[1]+h, xy[0]:xy[0]+w])
+                    ax_i.imshow(cv2.cvtColor(image[xy[1]:xy[1]+h, xy[0]:xy[0]+w], cv2.COLOR_BGR2RGB))
             else:
                 fig, ax_im = plt.subplots()
-                ax_im.imshow(segmented_image)
+                ax_im.imshow(cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB))
             fig = plt.gcf()
             fig.canvas.set_window_title(image_file)
             plt.draw()
             plt.show()
-            plt.pause(5)
-            #scipy.misc.imsave(os.path.join(output_dir, os.path.basename(image_file)), segmented_image)
+            #imsave(os.path.join(output_dir, os.path.basename(image_file)), segmented_image)
 
 
 def freeze_graph(args):
@@ -444,40 +444,6 @@ def optimise_graph(args):
     shutil.move(args.frozen_model_dir+'/optimised_graph.pb', args.optimised_model_dir)
 
 
-def predict_video(args, image_shape=None):
-    if args.video_file_in is None:
-        print("for video processing need --video_file_in")
-        return
-    if args.video_file_out is None:
-        print("for video processing need --video_file_out")
-        return
-
-    def process_frame(image):
-        if image_shape is not None:
-            image = scipy.misc.imresize(image, image_shape)
-        segmented_image, tf_time_ms, img_time_ms = predict_image(sess, model, image, colors)
-        return segmented_image
-
-    tf.reset_default_graph()
-    with tf.Session(config=session_config(args)) as sess:
-        model = fcn8vgg16.FCN8_VGG16(define_graph=False)
-        model.load_model(sess, 'trained_model' if args.model_dir is None else args.model_dir)
-        print('Running on video {}, output to: {}'.format(args.video_file_in, args.video_file_out))
-        colors = get_colors()
-        input_clip = VideoFileClip(args.video_file_in)
-        annotated_clip = input_clip.fl_image(process_frame)
-        annotated_clip.write_videofile(args.video_file_out, audio=False)
-        # for half size
-        # ubuntu/1080ti. with GPU ??fps. with CPU the same??
-        # mac/cpu 1.8s/frame
-        # full size 1280x720
-        # ubuntu/gpu 1.2s/frame i.e. 0.8fps :(
-        # ubuntu/cpu 1.2fps
-        # mac cpu 6.5sec/frame
-
-
-
-
 def check_tf():
     # Check TensorFlow Version
     assert LooseVersion(tf.__version__) >= LooseVersion('1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
@@ -513,6 +479,7 @@ def parse_args():
     parser.add_argument('-fd', '--frozen_model_dir', help='model directory for frozen graph. for freeze', type=str, default=None)
     parser.add_argument('-od', '--optimised_model_dir', help='model directory for optimised graph. for optimize', type=str, default=None)
     parser.add_argument('-fn', '--file_name', help='file to run prediction on', type=str, default=None)
+    parser.add_argument('-tr', '--trace', help='turn tensorflow tracing on for prediction', type=bool, default=False)
     args = parser.parse_args()
     return args
 
@@ -553,6 +520,7 @@ if __name__ == '__main__':
 
     elif args.action=='predict':
         image_shape = (256, 512)
+        print('trace={}'.format(args.trace))
         if args.file_name is not None:
             files = [args.file_name]
         else:

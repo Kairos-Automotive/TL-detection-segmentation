@@ -306,3 +306,20 @@ segmentation results
 over the original image and calculate bounding boxes.
 
 ![results of detection](test_img/test_prediction_output.png)
+
+
+## Tensorflow Profiling
+
+It is possible to turn on timeline profiling when running prediciton
+on an image. To do this just use `--trace=True` argument:
+```
+$ predict --gpu=0 --model_dir=optimised_model --file_name=test_img/carla2.jpg --trace=True
+```
+
+After that there is a file called `tf_trace_timeline.json`
+of the *second* call to `tf.run` which
+does prediction for the image.
+You can open `chrome://tracing`, hit `Load` and point to the json file.
+You would see a profiler report similar to:
+
+![results of profiling](test_img/profiler_timeline.png)
