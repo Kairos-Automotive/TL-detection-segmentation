@@ -148,17 +148,29 @@ class FCN8_VGG16:
                 # print("checkpoint saved to {}".format(save_path))
         return l
 
-    def predict_one(self, sess, image):
+    def predict_one(self, sess, image, trace=False):
         """
         Generate prediction for one image
         :param sess: TF session
         :param image: scipy image
         :return: predicted classes for all pixels in the image
         """
-        predicted_class = sess.run( [self._prediction_class], {self._keep_prob: 1.0, self._images: [image]})
+        if trace:
+            options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            predicted_class = sess.run([self._prediction_class],
+                                       {self._keep_prob: 1.0, self._images: [image]},
+                                       options=options,
+                                       run_metadata=run_metadata)
+        else:
+            run_metadata = None
+            predicted_class = sess.run( [self._prediction_class], {self._keep_prob: 1.0, self._images: [image]})
         predicted_class = predicted_class[0]
         predicted_class = predicted_class[0,:,:,:]
-        return predicted_class
+        if trace:
+            return predicted_class, run_metadata
+        else:
+            return predicted_class
 
     def _create_input_pipeline(self):
         # define input placeholders in the graph
