@@ -145,6 +145,7 @@ def get_train_batch_generator(label_path_patterns, image_shape):
                 image_file = image_paths[label_file]
                 image = cv2.resize(cv2.imread(image_file), (image_shape[1],image_shape[0],), interpolation=cv2.INTER_NEAREST)
                 gt_image = cv2.resize(cv2.imread(label_file), (image_shape[1],image_shape[0],), interpolation=cv2.INTER_NEAREST)
+                gt_image = gt_image[:,:,0] # openCV reads grayscale png image as 3 channels
                 tmp = []
                 for label in range(num_classes):
                   tmp.append(gt_image == label)
