@@ -181,7 +181,10 @@ class FCN8_VGG16:
         # zero-mean input
         with tf.name_scope('preprocess') as scope:
             self._images_float = tf.image.convert_image_dtype(self._images, tf.float32)
-            self._images_std = tf.map_fn(lambda img: tf.image.per_image_standardization(img), self._images_float)
+            #self._images_std = tf.map_fn(lambda img: tf.image.per_image_standardization(img), self._images_float)
+            images_max = tf.add(tf.constant(1.0, dtype=tf.float32), tf.reduce_max(self._images_float, axis=[1,2,3], keep_dims=True))
+            images_mean = tf.reduce_mean(self._images_float, axis=[1,2,3], keep_dims=True)
+            self._images_std = tf.divide(tf.subtract(self._images_float, images_mean), images_max)
             self._labels_float = tf.cast(self._labels, tf.float32)
 
     def _create_vgg16_conv_layers(self):
