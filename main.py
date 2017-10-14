@@ -228,12 +228,11 @@ def get_labeled_bboxes(heatmap):
         nonzerox = np.array(nonzero[1])
         # Define a bounding box based on min/max x and y
         bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
-        # skip boxes which do not look realistic. too small in one dimension or too 'vertical'
-        #w = bbox[1][0] - bbox[0][0]
-        #h = bbox[1][1] - bbox[0][1]
-        #if w<30 or h<30 or w==0 or float(h)/float(w) > 1.5:
-        #    continue
-        # Draw the box on the image and return it
+        # skip boxes which do not look realistic. too small in one dimension
+        w = bbox[1][0] - bbox[0][0]
+        h = bbox[1][1] - bbox[0][1]
+        if w<5 or h<10:
+            continue
         bboxes.append(bbox)
     # Return the bounding boxes
     return bboxes
