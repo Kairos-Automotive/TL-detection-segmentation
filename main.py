@@ -499,7 +499,7 @@ if __name__ == '__main__':
         print('epochs={}'.format(args.epochs))
         print('learning_rate={}'.format(args.learning_rate))
         # this is image size to be read and trained on. predict also uses this
-        image_shape = (256, 512)
+        image_shape = (288, 384)
         if args.action=='train':
             # cityscapes size is 2048x1024, i.e. 2:1.
             # bosch size is 1280x720. i.e. 80x45~1.77.
@@ -518,7 +518,7 @@ if __name__ == '__main__':
             train(args, image_shape, label_path_patterns)
 
     elif args.action=='predict':
-        image_shape = (256, 512)
+        image_shape = (288, 384)
         print('trace={}'.format(args.trace))
         if args.file_name is not None:
             files = [args.file_name]
