@@ -23,6 +23,7 @@
 --outputs=predictions/prediction_class \
 --transforms='
 add_default_attributes
+remove_nodes(op=Identity, op=CheckNumerics)
 fold_constants(ignore_errors=true)
 fold_batch_norms
 fold_old_batch_norms
