@@ -20,7 +20,7 @@ from scipy.ndimage.measurements import label
 import matplotlib.patches as patches
 
 import helper
-import fcn8vgg16
+import fcn8vgg16v2
 
 """Using FCN Semantic Segmentation to detect Traffic Lights.
 
@@ -168,7 +168,7 @@ def train(args, image_shape, labels_path_patterns):
     with tf.Session(config=config) as sess:
         # define our FCN
         num_classes = 2 # "traffic light"/"not traffic light" pixel
-        model = fcn8vgg16.FCN8_VGG16(num_classes)
+        model = fcn8vgg16v2.FCN8_VGG16(num_classes)
 
         # variables initialization
         sess.run(tf.global_variables_initializer())
@@ -302,7 +302,7 @@ def session_config(args):
 def predict_file(args, image_shape, file_names):
     tf.reset_default_graph()
     with tf.Session(config=session_config(args)) as sess:
-        model = fcn8vgg16.FCN8_VGG16(define_graph=False)
+        model = fcn8vgg16v2.FCN8_VGG16(define_graph=False)
         model.load_model(sess, 'trained_model' if args.model_dir is None else args.model_dir)
 
         tf_total_duration = 0.
@@ -397,7 +397,7 @@ def freeze_graph(args):
 
     # save model in same format as usual
     print('saving frozen model as saved_model to {}'.format(args.frozen_model_dir))
-    model = fcn8vgg16.FCN8_VGG16(define_graph=False)
+    model = fcn8vgg16v2.FCN8_VGG16(define_graph=False)
     tf.reset_default_graph()
     tf.import_graph_def(output_graph_def, name='')
     with tf.Session() as sess:
@@ -435,7 +435,7 @@ def optimise_graph(args):
     #    os.makedirs(args.optimised_model_dir)
 
     print('saving optimised model as saved_model to {}'.format(args.optimised_model_dir))
-    model = fcn8vgg16.FCN8_VGG16(define_graph=False)
+    model = fcn8vgg16v2.FCN8_VGG16(define_graph=False)
     tf.reset_default_graph()
     tf.import_graph_def(gd, name='')
     with tf.Session() as sess:
