@@ -60,7 +60,7 @@ def load_trained_vgg_vars(sess):
     return var_values
 
 
-def get_train_batch_generator(label_path_patterns, image_shape):
+def get_train_batch_generator(label_path_patterns, image_shape, batch_size):
     """
     Create batch generator for batches of training data. The label paths are inferred
     :param city_labels_path_pattern: path pattern for Cityscapes images
@@ -155,7 +155,7 @@ def get_train_batch_generator(label_path_patterns, image_shape):
                 gt_images.append(gt_image)
                 count += 1
             yield np.array(images), np.array(gt_images)
-    return get_batches_fn, num_samples
+    return get_batches_fn, math.floor(num_samples/batch_size)*batch_size
 
 
 def train(args, image_shape, labels_path_patterns):
@@ -177,7 +177,7 @@ def train(args, image_shape, labels_path_patterns):
 
         # Create batch generator
         train_batches_fn, num_samples = get_train_batch_generator(label_path_patterns,
-                                                                  image_shape)
+                                                                  image_shape, args.batch_size)
         print("total number of training examples: {}".format(num_samples))
         time_str = time.strftime("%Y%m%d_%H%M%S")
         run_name = "/{}_ep{}_b{}_lr{:.6f}_kp{}".format(time_str, args.epochs, args.batch_size, args.learning_rate, args.keep_prob)
