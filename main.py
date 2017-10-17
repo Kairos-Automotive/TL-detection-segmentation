@@ -129,6 +129,8 @@ def get_train_batch_generator(label_path_patterns, image_shape, batch_size):
     num_classes = 2
     num_samples = len(label_paths)
     assert len(image_paths) == len(label_paths)
+    # make number of samples so that all batches are same size
+    num_samples = math.floor(num_samples / batch_size) * batch_size
 
     def get_batches_fn(batch_size):
         """
@@ -155,7 +157,7 @@ def get_train_batch_generator(label_path_patterns, image_shape, batch_size):
                 gt_images.append(gt_image)
                 count += 1
             yield np.array(images), np.array(gt_images)
-    return get_batches_fn, math.floor(num_samples/batch_size)*batch_size
+    return get_batches_fn, num_samples
 
 
 def train(args, image_shape, labels_path_patterns):
