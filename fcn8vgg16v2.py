@@ -5,7 +5,7 @@ import os
 
 
 class FCN8_VGG16:
-    def __init__(self, num_classes = 0, define_graph=True):
+    def __init__(self, num_classes = 0, define_graph=True, batch_size=None):
         """ initialize network
 
         for training we need to set shapes
@@ -149,7 +149,7 @@ class FCN8_VGG16:
             saver = tf.train.Saver()  # by default saves all variables
             if not os.path.exists(ckpt_dir):
                 os.makedirs(ckpt_dir)
-            checkpoint_dir = os.path.join(ckpt_dir, 'fcn8vgg16')
+            checkpoint_dir = os.path.join(ckpt_dir, 'fcn8vgg16v2')
             ckpt = tf.train.get_checkpoint_state(os.path.dirname(checkpoint_dir))
             if ckpt and ckpt.model_checkpoint_path:
                 saver.restore(sess, ckpt.model_checkpoint_path)

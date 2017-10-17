@@ -5,7 +5,7 @@ import os
 
 
 class FCN8_VGG16:
-    def __init__(self, num_classes = 0, define_graph=True):
+    def __init__(self, num_classes = 0, define_graph=True, batch_size=None):
         """ initialize network
 
         for training we need to set shapes
