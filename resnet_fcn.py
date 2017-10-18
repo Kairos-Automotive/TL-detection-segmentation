@@ -20,7 +20,7 @@ class RESNET_FCN:
         if define_graph:
             # create entire model graph
             self._learning_rate = tf.placeholder(tf.float32, name='lr', shape=[])
-            self._create_input_pipeline(image_shape, batch_size)
+            self._create_input_pipeline(image_shape)
             # this is different
             self._logits = resnet_fcn_import.inference(x=self._images_std, is_training=True, num_classes=num_classes)
             self._create_predictions()
@@ -168,12 +168,12 @@ class RESNET_FCN:
         else:
             return predicted_class
 
-    def _create_input_pipeline(self, image_shape, batch_size):
+    def _create_input_pipeline(self, image_shape):
         # define input placeholders in the graph
         with tf.name_scope("data"):
-            self._images = tf.placeholder(tf.uint8, name='images', shape=(batch_size, image_shape[0], image_shape[1], 3))
+            self._images = tf.placeholder(tf.uint8, name='images', shape=(None, image_shape[0], image_shape[1], 3))
             tf.summary.image('input_images', self._images, max_outputs=2)
-            self._labels = tf.placeholder(tf.uint8, name='labels', shape=(batch_size, image_shape[0], image_shape[1], self._num_classes))
+            self._labels = tf.placeholder(tf.uint8, name='labels', shape=(None, image_shape[0], image_shape[1], self._num_classes))
         # zero-mean input
         with tf.name_scope('preprocess') as scope:
             self._images_float = tf.image.convert_image_dtype(self._images, tf.float32)
