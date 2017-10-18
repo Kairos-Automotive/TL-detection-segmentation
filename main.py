@@ -21,7 +21,8 @@ import matplotlib.patches as patches
 
 import helper
 #from fcn8vgg16v2 import FCN8_VGG16 as model_implementation
-from enet import ENET as model_implementation
+#from enet import ENET as model_implementation
+from resnet_fcn import RESNET_FCN as model_implementation
 
 """Using FCN Semantic Segmentation to detect Traffic Lights.
 
