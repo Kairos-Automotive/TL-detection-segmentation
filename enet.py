@@ -20,7 +20,6 @@ class ENET:
         self._num_classes = num_classes
         if define_graph:
             # create entire model graph
-            self._keep_prob = tf.placeholder(tf.float32, name='keep_prob', shape=[])
             self._learning_rate = tf.placeholder(tf.float32, name='lr', shape=[])
             self._create_input_pipeline(image_shape, batch_size)
             # this is different
@@ -52,7 +51,7 @@ class ENET:
         # we cannot continue training from this state as other instance variables are undefined
         graph = tf.get_default_graph()
         self._images = graph.get_tensor_by_name("data/images:0")
-        self._keep_prob = graph.get_tensor_by_name("keep_prob:0")
+        #self._keep_prob = graph.get_tensor_by_name("keep_prob:0")
         self._prediction_class = graph.get_tensor_by_name("predictions/prediction_class:0")
 
 
@@ -119,7 +118,6 @@ class ENET:
             for images, labels in batches_pbar:
                 feed_dict = {self._images: images,
                              self._labels: labels,
-                             self._keep_prob: keep_prob_value,
                              self._learning_rate: learning_rate}
                 _, loss, summaries, _, _ = sess.run([self._optimizer,
                                                      self._loss,
@@ -167,12 +165,12 @@ class ENET:
             options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
             predicted_class = sess.run([self._prediction_class],
-                                       {self._keep_prob: 1.0, self._images: [image]},
+                                       {self._images: [image]},
                                        options=options,
                                        run_metadata=run_metadata)
         else:
             run_metadata = None
-            predicted_class = sess.run( [self._prediction_class], {self._keep_prob: 1.0, self._images: [image]})
+            predicted_class = sess.run( [self._prediction_class], {self._images: [image]})
         predicted_class = predicted_class[0]
         predicted_class = predicted_class[0,:,:,:]
         if trace:
